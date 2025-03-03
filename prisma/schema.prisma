@@ -1,0 +1,421 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String       @id @default(auto()) @map("_id") @db.ObjectId
+  fullName         String?
+  email            String       @unique
+  password         String?
+  role             UserRoleEnum @default(MEMBER)
+  status           UserStatus   @default(INACTIVE)
+  location         String?
+  userName         String?
+  designation      String?
+  phone            String?
+  // isVerified       Boolean      @default(false)
+  image            String?
+  otp              Int?
+  otpExpiry        DateTime?
+  fcmToken         String?
+  company          String?
+  appleId          String?
+  isAvailable      Boolean      @default(true)
+  isTeamAssigned   Boolean      @default(false)
+  isNotificationOn Boolean      @default(true)
+  // onBoarding       Boolean      @default(false)
+  stripeAccountUrl String?
+  stripeCustomerId String?
+  senderCustomerID String?
+  isSubscribed     Boolean      @default(false)
+  projectCreated   Int          @default(0)
+  mapCreated       Int          @default(0)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  // Relationships
+  roomsSent          Room[]          @relation("SenderRelation")
+  roomsReceived      Room[]          @relation("ReceiverRelation")
+  roomParticipants   RoomUser[]
+  chatsSent          Chat[]          @relation("SenderRelation")
+  chatsReceived      Chat[]          @relation("ReceiverRelation")
+  createdRooms       Room[]          @relation("CreatorRelation")
+  reviews            Review[]
+  comments           Comment[]
+  notifications      Notification[]
+  categories         Category[]
+  Map                Map[]
+  Project            Project[]       @relation("UserProjects")
+  supervisedProjects Project[]       @relation("SupervisorProjects")
+  Team               Team[]
+  Files              Files[]
+  TeamMember         TeamMember[]
+  ProjectMember      ProjectMember[]
+
+  MemberId          TeamMember[]        @relation("MemberTeamMembers")
+  UserTeamMembers   TeamMember[]        @relation("UserTeamMembers")
+  Task              Task[]
+  TeamAssigned      TeamAssigned[]
+  userSubscriptions UserSubscription[]
+  SubscriptionOffer SubscriptionOffer[]
+  Supervisor        Supervisor[]        @relation("SupervisorUsers")
+  UserSupervisors   Supervisor[]        @relation("UserSupervisors")
+  assigner          ProjectMember[]     @relation("AssignerId")
+  projectMember     ProjectMember[]     @relation("ProjectMemberId")
+
+  @@map("users")
+}
+
+model RoomUser {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  roomId String @db.ObjectId
+  userId String @db.ObjectId
+  room   Room   @relation(fields: [roomId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([userId, roomId])
+  @@map("room_users")
+}
+
+model Room {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  type       RoomType @default(GROUP) // Type: One-to-one or Group chat
+  senderId   String?  @db.ObjectId
+  receiverId String?  @db.ObjectId
+  projectId  String?  @db.ObjectId
+  creatorId  String   @db.ObjectId
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  sender   User? @relation("SenderRelation", fields: [senderId], references: [id])
+  receiver User? @relation("ReceiverRelation", fields: [receiverId], references: [id])
+  creator  User  @relation("CreatorRelation", fields: [creatorId], references: [id])
+
+  participants RoomUser[] // Relationship to participants (RoomUser table)
+  chat         Chat[]
+  project      Project?   @relation(fields: [projectId], references: [id])
+
+  @@map("rooms")
+}
+
+model Chat {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  senderId   String   @db.ObjectId
+  receiverId String?  @db.ObjectId // Nullable for group chats
+  roomId     String   @db.ObjectId
+  message    String
+  images     String[]
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Relationships
+  sender   User  @relation("SenderRelation", fields: [senderId], references: [id])
+  receiver User? @relation("ReceiverRelation", fields: [receiverId], references: [id]) // Optional for group chats
+  room     Room  @relation(fields: [roomId], references: [id])
+
+  @@map("chats")
+}
+
+model Supervisor {
+  id           String @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String @db.ObjectId
+  supervisorId String @db.ObjectId
+
+  user       User @relation("UserSupervisors", fields: [userId], references: [id])
+  supervisor User @relation("SupervisorUsers", fields: [supervisorId], references: [id])
+
+  @@map("supervisors")
+}
+
+model Map {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  title     String
+  map       String
+  latitude  Float?
+  longitude Float?
+  count     Int      @default(0)
+  size      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User      @relation(fields: [userId], references: [id])
+  Project Project[]
+  Task    Task[]
+
+  @@map("maps")
+}
+
+model Project {
+  id            String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId        String        @db.ObjectId
+  projectName   String
+  supervisorId  String        @db.ObjectId
+  mapId         String        @db.ObjectId
+  projectStatus ProjectStatus @default(PENDING)
+  teamSize      Int           @default(0)
+  members       Int           @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  user          User            @relation("UserProjects", fields: [userId], references: [id])
+  supervisor    User            @relation("SupervisorProjects", fields: [supervisorId], references: [id])
+  map           Map             @relation(fields: [mapId], references: [id])
+  Task          Task[]
+  Team          Team[]
+  Files         Files[]
+  TeamMember    TeamMember[]
+  ProjectMember ProjectMember[]
+  TeamAssigned  TeamAssigned[]
+  Room          Room[]
+
+  @@map("projects")
+}
+
+model SubscriptionOffer {
+  id               String             @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  description      String?            @default("")
+  price            Float
+  status           UserStatus         @default(ACTIVE)
+  createdBy        String             @db.ObjectId
+  creator          User               @relation(fields: [createdBy], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  UserSubscription UserSubscription[]
+  Payment          Payment[]
+
+  @@map("subscription_offers")
+}
+
+model UserSubscription {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId              String            @db.ObjectId
+  subscriptionOfferId String            @db.ObjectId
+  paymentStatus       PaymentStatus     @default(COMPLETED)
+  //status              SubscriptionStatus @default(PENDING)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  user                User              @relation(fields: [userId], references: [id])
+  subscriptionOffer   SubscriptionOffer @relation(fields: [subscriptionOfferId], references: [id])
+
+  @@map("user_subscriptions")
+}
+
+model Payment {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+  paymentId           String
+  paymentAmount       Float
+  subscriptionOfferId String            @unique @db.ObjectId
+  paymentDate         DateTime          @default(now())
+  status              PaymentStatus     @default(COMPLETED)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  subscriptionOffer   SubscriptionOffer @relation(fields: [subscriptionOfferId], references: [id])
+
+  @@map("payments")
+}
+
+model ProjectMember {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  projectId String @db.ObjectId
+  userId    String @db.ObjectId
+  memberId  String @db.ObjectId
+
+  // Relationships
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation("AssignerId", fields: [userId], references: [id])
+  member  User    @relation("ProjectMemberId", fields: [memberId], references: [id])
+  User    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId, memberId])
+  @@map("project_members")
+}
+
+model Task {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String        @db.ObjectId
+  projectId       String        @db.ObjectId
+  mapId           String        @db.ObjectId
+  taskName        String
+  taskStatus      ProjectStatus @default(PENDING)
+  teamAssigned    Int?
+  membersAssigned Int?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  project      Project        @relation(fields: [projectId], references: [id])
+  user         User           @relation(fields: [userId], references: [id])
+  map          Map            @relation(fields: [mapId], references: [id])
+  TeamAssigned TeamAssigned[]
+
+  @@map("tasks")
+}
+
+model TeamAssigned {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  teamId    String @db.ObjectId
+  projectId String @db.ObjectId
+  taskId    String @db.ObjectId
+  userId    String @db.ObjectId
+
+  team    Team    @relation(fields: [teamId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+  task    Task    @relation(fields: [taskId], references: [id])
+  User    User    @relation(fields: [userId], references: [id])
+
+  @@map("team_assigned")
+}
+
+model Team {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String   @db.ObjectId
+  projectId      String   @db.ObjectId
+  teamName       String
+  departmentName String
+  teamLogo       String?
+  totalMembers   Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User           @relation(fields: [userId], references: [id])
+  project      Project        @relation(fields: [projectId], references: [id])
+  TeamMember   TeamMember[]
+  TeamAssigned TeamAssigned[]
+
+  @@map("teams")
+}
+
+model TeamMember {
+  id        String @id @default(auto()) @map("_id") @db.ObjectId
+  teamId    String @db.ObjectId
+  userId    String @db.ObjectId
+  projectId String @db.ObjectId
+  memberId  String @db.ObjectId
+
+  // Relationships
+  team    Team    @relation(fields: [teamId], references: [id])
+  user    User    @relation("UserTeamMembers", fields: [userId], references: [id])
+  member  User    @relation("MemberTeamMembers", fields: [memberId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+  User    User    @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId, memberId])
+  @@map("team_members")
+}
+
+model Files {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  projectId String   @db.ObjectId
+  fileName  String?
+  fileUrl   String
+  size      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id])
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("files")
+}
+
+model Review {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
+  terminalId String   @db.ObjectId
+  rating     Int
+  comment    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("reviews")
+}
+
+model Category {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId       String   @db.ObjectId
+  categoryName String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("categories")
+}
+
+model Comment {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  tripId    String   @db.ObjectId
+  parentId  String?  @db.ObjectId
+  comment   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User      @relation(fields: [userId], references: [id])
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([tripId], name: "idx_tripId") // Index for faster trip-based queries
+  @@index([userId], name: "idx_userId") // Index for user-specific queries
+  @@index([parentId], name: "idx_parentId") // Index for nested comments
+  @@map("comments")
+}
+
+model Notification {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  title     String
+  body      String
+  data      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@map("notifications")
+}
+
+enum UserRoleEnum {
+  MEMBER
+  SUPERVISOR
+  MANAGER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REQUIRES_CAPTURE
+}
+
+enum RoomType {
+  ONE_TO_ONE
+  GROUP
+}
+
+enum ProjectStatus {
+  PENDING
+  ONGOING
+  COMPLETED
+}
